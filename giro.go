@@ -39,6 +39,7 @@ import (
 //go:embed tabula-*-jar-with-dependencies.jar
 var tabulaJar []byte
 
+const DefaultXLSXURL = "https://www.mnb.hu/letoltes/sht.xlsx"
 const DefaultURL = "https://www.giro.hu/dokumentumok"
 const DefaultPattern = `^(.*-xls-.*$|EHT_([0-9]{8}|[0-9]{4}[_-][0-9]{2}[_-][0-9]{2}|2[0-9]{5})\.(pdf|xlsx?)|AVT_[0-9]{2}_[0-9]{2}_2[0-9]{3}\.(pdf|xlsx?))$`
 
@@ -179,7 +180,18 @@ Loop:
 	return results[len(results)-1], nil
 }
 
+// Parse the reader.
+//
+// Pass nil as reader to get the default XLSX.
 func Parse(ctx context.Context, r io.Reader) ([]Hitelezo, error) {
+	if r == nil {
+		_, rc, err := DownloadFile(ctx, DefaultXLSXURL)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+		r = rc
+	}
 	sr, err := iohlp.MakeSectionReader(r, 1<<20)
 	if err != nil {
 		return nil, err
@@ -198,7 +210,9 @@ func Parse(ctx context.Context, r io.Reader) ([]Hitelezo, error) {
 
 	hit, err := ParseXLSX(ctx, io.NewSectionReader(sr, 0, sr.Size()))
 	logger.Info("ParseXLSX", "hitelezok", len(hit), "error", err)
-	if err != nil && strings.Contains(err.Error(), "not a valid zip") || strings.Contains(err.Error(), "unsupported") {
+	if err != nil &&
+		(strings.Contains(err.Error(), "not a valid zip") ||
+			strings.Contains(err.Error(), "unsupported")) {
 		hit, err = ParseXLS(ctx, sr)
 	}
 	for i := 0; i < len(hit); i++ {
@@ -352,7 +366,7 @@ func ParseXLSX(ctx context.Context, r io.Reader) ([]Hitelezo, error) {
 		return nil, err
 	}
 	records := make([]Hitelezo, 0, 8192)
-	var headerSkipped bool
+	var headerSkipped, noIrszam bool
 	var rec Hitelezo
 	dst := []*string{&rec.Bankszerv, &rec.Nev, &rec.Irszam, &rec.Cim}
 	for rows.Next() {
@@ -362,6 +376,18 @@ func ParseXLSX(ctx context.Context, r io.Reader) ([]Hitelezo, error) {
 		}
 		if !headerSkipped {
 			headerSkipped = true
+			// Branch office code
+			// BIC code
+			// Name of the branch office
+			// Address of the branch office
+			// Branch office may send VIBER items
+			// Branch office may receive VIBER items
+			// logger.Info("header", "row", strings.Join(row, ", "))
+			if noIrszam = row[3] == "Address of the branch office"; noIrszam {
+				dst = append(dst[:0],
+					&rec.Bankszerv, &rec.BIC, &rec.Nev, &rec.Cim)
+				// logger.Warn("sht.xlsx", "dst", dst)
+			}
 			continue
 		}
 		for j, p := range dst {
@@ -419,7 +445,7 @@ func ParseXLS(ctx context.Context, r io.ReadSeeker) ([]Hitelezo, error) {
 
 // 10002003	Magyar Államkincstár. értékp.-pénztár	1139	Budapest, Váci út 71.
 type Hitelezo struct {
-	Bankszerv, Nev, Irszam, Cim string
+	Bankszerv, BIC, Nev, Irszam, Cim string
 }
 
 func (h Hitelezo) String() string {
@@ -430,6 +456,15 @@ func checkAppend(records []Hitelezo, rec Hitelezo) []Hitelezo {
 	for _, p := range []*string{&rec.Bankszerv, &rec.Nev, &rec.Irszam, &rec.Cim} {
 		*p = strings.TrimSpace(strings.ReplaceAll(*p, "\x00", ""))
 	}
+	if rec.Irszam == "" && len(rec.Cim) > 5 {
+		if i := strings.IndexByte(rec.Cim, ' '); i == 4 &&
+			strings.IndexFunc(rec.Cim[:4],
+				func(r rune) bool { return !('0' <= r && r <= '9') },
+			) < 0 {
+			rec.Irszam, rec.Cim = rec.Cim[:4], rec.Cim[5:]
+		}
+	}
+	// fmt.Printf("checkAppend rec=%q\n", rec)
 	if rec != (Hitelezo{}) && len(rec.Bankszerv) == 8 {
 		records = append(records, rec)
 	}

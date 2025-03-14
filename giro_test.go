@@ -6,11 +6,27 @@ package giro
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestParseDefault(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	hit, err := Parse(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(hit)
+	t.Logf("%s", string(b))
+	if len(hit) == 0 {
+		t.Error("hit=nil")
+	}
+}
 
 func TestParsePDF(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
