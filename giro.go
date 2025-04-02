@@ -46,6 +46,9 @@ const DefaultPattern = `^(.*-xls-.*$|EHT_([0-9]{8}|[0-9]{4}[_-][0-9]{2}[_-][0-9]
 var ErrNotFound = errors.New("not found")
 
 func SearchXLSURL(ctx context.Context, searchURL, pattern string) (string, error) {
+	if searchURL == DefaultXLSXURL {
+		return searchURL, nil
+	}
 	noRedir := http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
