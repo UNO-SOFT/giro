@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/UNO-SOFT/filecache"
 	"github.com/UNO-SOFT/zlog/v2"
 
 	"github.com/rogpeppe/retry"
@@ -35,9 +36,6 @@ import (
 	"github.com/extrame/xls"
 	"github.com/xuri/excelize/v2"
 )
-
-//go:embed tabula-*-jar-with-dependencies.jar
-var tabulaJar []byte
 
 const DefaultXLSXURL = "https://www.mnb.hu/letoltes/sht.xlsx"
 const DefaultURL = "https://www.giro.hu/dokumentumok"
@@ -247,9 +245,52 @@ func parsePDFTabula(ctx context.Context, r io.Reader) ([]Hitelezo, error) {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
 	defer os.RemoveAll(dir)
+
+	const tabulaJarURL = "https://github.com/tabulapdf/tabula-java/releases/download/v1.0.5/tabula-1.0.5-jar-with-dependencies.jar"
+	ucd, _ := os.UserCacheDir()
+	cache, err := filecache.Open(filepath.Join(ucd, "giro"))
+	if err != nil {
+		return nil, err
+	}
+	actionID := filecache.ActionID([]byte(tabulaJarURL))
+	var rc io.ReadCloser
+	if fn, _, _ := cache.GetFile(actionID); fn != "" {
+		if fh, err := os.Open(fn); err == nil {
+			defer fh.Close()
+			rc = fh
+		}
+	}
+	if rc == nil {
+		resp, err := http.Get(tabulaJarURL)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			return nil, fmt.Errorf("%s: %s", resp.Request.URL, resp.Status)
+		}
+		b, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if _, _, err = cache.Put(actionID, bytes.NewReader(b)); err != nil {
+			return nil, err
+		}
+		rc = struct {
+			io.Reader
+			io.Closer
+		}{bytes.NewReader(b), resp.Body}
+	}
+
 	jarFn := filepath.Join(dir, "tabula.jar")
-	if err = os.WriteFile(jarFn, tabulaJar, 0400); err != nil {
+	if fh, err := os.OpenFile(jarFn, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0400); err != nil {
 		return nil, fmt.Errorf("write jar file: %w", err)
+	} else if _, err = io.Copy(fh, rc); err != nil {
+		fh.Close()
+		return nil, err
+	} else if err = fh.Close(); err != nil {
+		return nil, err
 	}
 	pdfFh, err := os.Create(filepath.Join(dir, "x.pdf"))
 	if err != nil {
