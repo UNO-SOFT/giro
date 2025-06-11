@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	github.com/UNO-SOFT/bankinap v0.0.1 // indirect
 	github.com/dgryski/go-linebreak v0.0.0-20180812204043-d8f37254e7d3 // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect

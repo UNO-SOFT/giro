@@ -1,3 +1,5 @@
+github.com/UNO-SOFT/bankinap v0.0.1 h1:4vtBCCmsm6KCcOKniZmv2NtZloQ2wu/PesVIHgFYa3Q=
+github.com/UNO-SOFT/bankinap v0.0.1/go.mod h1:JphOkdpWs8M3zdLPSZ4duf6eOSZn0VkczgZx2D7JhZI=
 github.com/UNO-SOFT/filecache v0.4.0 h1:PzQ3UpPCkIzFnsilh6WcUVdWh5V8P53FlKbISmVNDI4=
 github.com/UNO-SOFT/filecache v0.4.0/go.mod h1:phf3WyIQAv1T+e0ggT1g/eiOQ42fMnJaHRMmd6Unkpo=
 github.com/UNO-SOFT/zlog v0.8.5 h1:GdaETmFSqpLIgATKi941IBF5xHPJqMXCD34++TLY4QY=
